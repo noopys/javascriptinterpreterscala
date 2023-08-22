@@ -1,0 +1,1 @@
+function (x: number, y: bool) { return x} (4, true)
