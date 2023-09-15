@@ -37,6 +37,7 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
   
   /* Lists */
   
+  // Remove consecutive duplicates in a list using recursion
   def compressRec[A](l: List[A]): List[A] = l match {
     case Nil | _ :: Nil => l
     case h1 :: (t1 @ (h2 :: _)) => {
@@ -44,7 +45,8 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
       else h1 :: compressRec(t1)
     }
   }
-  
+
+ // Remove consecutive duplicates in a list using foldRight 
   def compressFold[A](l: List[A]): List[A] = l.foldRight(Nil: List[A]){
     (h, acc) => {
       acc match {
@@ -57,6 +59,7 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
     } 
   }
   
+  // Map the first element that satisfies the given function
   def mapFirst[A](l: List[A])(f: A => Option[A]): List[A] = l match {
     case Nil => l
     case h :: t => {
@@ -69,6 +72,7 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
   
   /* Trees */
 
+  // Fold a tree from the left
   def foldLeft[A](t: Tree)(z: A)(f: (A, Int) => A): A = {
     def loop(acc: A, t: Tree): A = t match {
       case Empty => acc
@@ -85,6 +89,7 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
   def treeFromList(l: List[Int]): Tree =
     l.foldLeft(Empty: Tree){ (acc, i) => acc insert i }
 
+  // Check if the tree is strictly ordered
   def strictlyOrdered(t: Tree): Boolean = {
     val (b, _) = foldLeft(t)((true, None: Option[Int])){
       case((false,a),b) => (false,a)
@@ -94,45 +99,49 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
     b
   }
 
-  /*** Rename bound variables in e ***/
+  /*** Rename bound variables in expression e ***/
 
-  def rename(e: Expr)(fresh: String => String): Expr = {
-    def ren(env: Map[String,String], e: Expr): Expr = {
-      e match {
-        //testing line put in by logan doesnt do anything
-        //case _ => e
-        case N(_) | B(_) | Undefined | S(_) => e
-        case Print(e1) => Print(ren(env, e1))
+ def rename(e: Expr)(fresh: String => String): Expr = {
+  def ren(env: Map[String, String], e: Expr): Expr = {
+    e match {
+      case N(_) | B(_) | Undefined | S(_) => e
+      case Print(e1) => Print(ren(env, e1))
 
-        case Unary(uop, e1) => ???
-        case Binary(bop, e1, e2) => ???
-        case If(e1, e2, e3) => ???
+      case Unary(uop, e1) => Unary(uop, ren(env, e1))
+      case Binary(bop, e1, e2) => Binary(bop, ren(env, e1), ren(env, e2))
+      case If(e1, e2, e3) => If(ren(env, e1), ren(env, e2), ren(env, e3))
 
-        case Var(y) => ???
+      case Var(y) => Var(env.getOrElse(y, y))
 
-        case Decl(mode, y, e1, e2) =>
-          val yp = fresh(y)
-          Decl(mode,yp,e1,e2)
+      case Decl(mode, y, e1, e2) =>
+        val yp = fresh(y)
+        Decl(mode, yp, ren(env, e1), ren(env + (y -> yp), e2))
 
-        case Function(p, params, tann, e1) => {
-          val (pp, envp): (Option[String], Map[String,String]) = p match {
-            case None => ???
-            case Some(x) => ???
+      case Function(p, params, tann, e1) => {
+        val (pp, envp) = p match {
+          case None => (None, env)
+          case Some(x) => {
+            val xp = fresh(x)
+            (Some(xp), env + (x -> xp))
           }
-          val (paramsp, envpp) = params.foldRight( (Nil: List[(String,MTyp)], envp) ) {
-            ???
-          }
-          ???
         }
-
-        case Call(e1, args) => ???
-
-        case Obj(fields) => ???
-        case GetField(e1, f) => ???
+        val (paramsp, envpp) = params.foldRight((Nil: List[(String, MTyp)], envp)) {
+          case ((yi, mt), (l, envAcc)) =>
+            val yp = fresh(yi)
+            ((yp, mt) :: l, envAcc + (yi -> yp))
+        }
+        Function(pp, paramsp, tann, ren(envpp, e1))
       }
+
+      case Call(e1, args) => Call(ren(env, e1), args.map(ren(env, _)))
+
+      case Obj(fields) => Obj(fields.map { case (f, e) => (f, ren(env, e)) })
+      case GetField(e1, f) => GetField(ren(env, e1), f)
     }
-    ren(empty, e)
   }
+  ren(Map.empty, e)
+}
+
 
   /*** Type Inference ***/
 
@@ -190,7 +199,6 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
       case Obj(fields) => TObj(fields map {case (a,b) => (a,typeof(env,b))}) 
       case GetField(Obj(fields), f) => typeof(env,fields.getOrElse(f,throw StuckError(Obj(fields))))
 
-      //case Decl(m, x, e1, e2) => typeof(extend(env, x, typeof(env,e1)),e2)
       case Decl(m,x,e1,e2)=>{
         val t1 = typeof(env, e1)
         val newenv = extend(env, x, t1)
@@ -269,7 +277,6 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
       case S(s)=>true
       case Undefined=>false
       case Function(_,_, _, _) => true
-      //case _ => ??? // delete this line when done
     }
   }
   
@@ -326,7 +333,6 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
           case (a1,a2)=> if(toNumber(a1) >= toNumber(a2)) true else false
         }
       }
-      case _ => ???
     }
   }
 
@@ -405,17 +411,17 @@ object Lab4 extends jsy.util.JsyApplication with Lab4Like {
         }
       }
       case Binary(Minus, N(v1), N(v2)) => N(v1-v2)
-      case Binary(Eq, v1, v2)if isValue(v1) && isValue(v2)=>{ B(v1 == v2)
-        // (v1, v2) match{
+      // case Binary(Eq, v1, v2)if isValue(v1) && isValue(v2)=>{ B(v1 == v2)
+      //   // (v1, v2) match{
           
-        //   case(S(a1),S(a2))=> if(a1 == a2) B(true) else B(false)
-        //   case (B(a1), B(a2))=> if(a1 == a2) B(true) else B(false)
-        //   case (Function(_,_,_,_),_) => throw DynamicTypeError(e)
-        //   case (_,Function(_,_,_,_)) => throw DynamicTypeError(e)
-        //   case (a1,a2)=> if(toNumber(a1).isNaN || toNumber(a2).isNaN) B(false) else {if(a1 == a2) B(true) else B(false)}
-        //   case _ => B(false)
-        // }
-      }
+      //   //   case(S(a1),S(a2))=> if(a1 == a2) B(true) else B(false)
+      //   //   case (B(a1), B(a2))=> if(a1 == a2) B(true) else B(false)
+      //   //   case (Function(_,_,_,_),_) => throw DynamicTypeError(e)
+      //   //   case (_,Function(_,_,_,_)) => throw DynamicTypeError(e)
+      //   //   case (a1,a2)=> if(toNumber(a1).isNaN || toNumber(a2).isNaN) B(false) else {if(a1 == a2) B(true) else B(false)}
+      //   //   case _ => B(false)
+      //   // }
+      // }
       case Binary(Ne, v1, v2) if isValue(v1) && isValue(v2)=>{
         (v1, v2) match{
           case(S(a1),S(a2))=> if(a1 == a2) B(false) else B(true)
